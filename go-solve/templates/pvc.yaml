@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "go-solve.fullname" . }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # storageClassName: no storageClassName provided, use default storageClass provided by default by AWS EKS
+  resources:
+    requests:
+      storage: 256Gi

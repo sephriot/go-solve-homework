@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "go-solve.fullname" . }}
+  labels:
+    {{- include "go-solve.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "go-solve.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "go-solve.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "go-solve.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: "configSub"
+          image: "alpine:3.7"
+          command: ["wget", "<fancyapp config path>", "&&", "envsubst < <fancyapp config path> > /etc/opt/fancyapp/config/config.yaml"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/opt/fancyapp/config
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "go-solve.fullname" . }}
+                  key: host
+            - name: DB_UN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "go-solve.fullname" . }}
+                  key: username
+            - name: DB_PW
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "go-solve.fullname" . }}
+                  key: password
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+          # up to 300 seconds of warm up time
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: {{ include "go-solve.fullname" . }}
+              mountPath: /data
+            - name: config
+              mountPath: /etc/opt/fancyapp/config
+              readOnly: true
+      volumes:
+        - name: {{ include "go-solve.fullname" . }}
+          persistentVolumeClaim:
+            claimName: {{ include "go-solve.fullname" . }}
+        - name: config
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
